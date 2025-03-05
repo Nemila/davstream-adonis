@@ -20,104 +20,109 @@ type MovieType = {
 
 export default class FrembedsController {
   addMovie = async (movie: MovieType) => {
-    console.log('IMPORTING MEDIA', movie.title)
-    const tmdbId = Number(movie.tmdb)
-    const tmdbData = await tmdbService.getMovieDetails(tmdbId)
+    try {
+      console.log('IMPORTING MEDIA', movie.title)
+      const tmdbId = Number(movie.tmdb)
+      const tmdbData = await tmdbService.getMovieDetails(tmdbId)
 
-    // Extract movie data
-    const alternativeTitles = tmdbData.alternative_titles.titles.map((i) => i.title).join(',')
-    const category = tmdbService.getMediaCategory(tmdbData.genres, tmdbData.keywords)
-    const trailerUrl = tmdbService.getTrailerUrl(tmdbData.videos)
-    const [logoPath, collection] = await Promise.all([
-      tmdbService.getMovieLogo(tmdbData.id),
-      tmdbService.getCollection(tmdbData.belongs_to_collection?.id),
-    ])
+      // Extract movie data
+      const alternativeTitles = tmdbData.alternative_titles.titles.map((i) => i.title).join(',')
+      const category = tmdbService.getMediaCategory(tmdbData.genres, tmdbData.keywords)
+      const trailerUrl = tmdbService.getTrailerUrl(tmdbData.videos)
+      const [logoPath, collection] = await Promise.all([
+        tmdbService.getMovieLogo(tmdbData.id),
+        tmdbService.getCollection(tmdbData.belongs_to_collection?.id),
+      ])
 
-    const recommendationsIds = tmdbData.recommendations.results
-      .filter((item) => item.id !== tmdbId)
-      .map((item) => item.id)
-    const similarIds = tmdbData.similar.results
-      .filter((item) => item.id !== tmdbId)
-      .map((item) => item.id)
-    const flatrate = tmdbService.getWatchProviders(tmdbData['watch/providers'])
+      const recommendationsIds = tmdbData.recommendations.results
+        .filter((item) => item.id !== tmdbId)
+        .map((item) => item.id)
+      const similarIds = tmdbData.similar.results
+        .filter((item) => item.id !== tmdbId)
+        .map((item) => item.id)
+      const flatrate = tmdbService.getWatchProviders(tmdbData['watch/providers'])
 
-    // Upsert media
-    const mediaData = {
-      releaseDate: new Date(tmdbData.release_date),
-      originalTitle: tmdbData.original_title,
-      tmdbRating: tmdbData.vote_average,
-      popularity: tmdbData.popularity,
-      overview: tmdbData.overview,
-      duration: tmdbData.runtime,
-      tagline: tmdbData.tagline,
-      imdbId: tmdbData.imdb_id,
-      isAdult: tmdbData.adult,
-      title: tmdbData.title,
-      genres: {
-        connectOrCreate: tmdbData.genres.map((genre) => ({
-          create: {
-            slug: _.kebabCase(genre.name),
-            name: genre.name,
-            tmdbId: genre.id,
-          },
-          where: { slug: _.kebabCase(genre.name) },
-        })),
-      },
-      ...(collection && {
-        collection: {
-          connectOrCreate: {
-            where: {
-              tmdbId: collection.id,
-            },
+      // Upsert media
+      const mediaData = {
+        releaseDate: new Date(tmdbData.release_date),
+        originalTitle: tmdbData.original_title,
+        tmdbRating: tmdbData.vote_average,
+        popularity: tmdbData.popularity,
+        overview: tmdbData.overview,
+        duration: tmdbData.runtime,
+        tagline: tmdbData.tagline,
+        imdbId: tmdbData.imdb_id,
+        isAdult: tmdbData.adult,
+        title: tmdbData.title,
+        genres: {
+          connectOrCreate: tmdbData.genres.map((genre) => ({
             create: {
-              backdropPath: tmdbService.IMAGE_BASE_URL + collection.backdrop_path,
-              posterPath: tmdbService.IMAGE_BASE_URL + collection.poster_path,
-              name: collection.name,
-              tmdbId: collection.id,
-              overview: collection.overview,
+              slug: _.kebabCase(genre.name),
+              name: genre.name,
+              tmdbId: genre.id,
+            },
+            where: { slug: _.kebabCase(genre.name) },
+          })),
+        },
+        ...(collection && {
+          collection: {
+            connectOrCreate: {
+              where: {
+                tmdbId: collection.id,
+              },
+              create: {
+                backdropPath: tmdbService.IMAGE_BASE_URL + collection.backdrop_path,
+                posterPath: tmdbService.IMAGE_BASE_URL + collection.poster_path,
+                name: collection.name,
+                tmdbId: collection.id,
+                overview: collection.overview,
+              },
             },
           },
+        }),
+        recommendations: { set: recommendationsIds },
+        similars: { set: similarIds },
+        players: {
+          connectOrCreate: movie.embedLinks.map((player) => ({
+            where: { url: player.url },
+            create: {
+              url: player.url,
+              host: new URL(player.url).hostname,
+              language: player.language,
+            },
+          })),
         },
-      }),
-      recommendations: { set: recommendationsIds },
-      similars: { set: similarIds },
-      players: {
-        connectOrCreate: movie.embedLinks.map((player) => ({
-          where: { url: player.url },
-          create: {
-            url: player.url,
-            host: new URL(player.url).hostname,
-            language: player.language,
-          },
-        })),
-      },
-      watchProviders: {
-        connectOrCreate: flatrate.map((item) => ({
-          where: { slug: _.kebabCase(item.provider_name) },
-          create: {
-            name: item.provider_name,
-            slug: _.kebabCase(item.provider_name),
-            tmdbId: item.provider_id,
-            priority: item.display_priority,
-            logoPath: tmdbService.IMAGE_BASE_URL + item.logo_path,
-          },
-        })),
-      },
-      alternativeTitles,
-      posterPath: tmdbData.poster_path && tmdbService.IMAGE_BASE_URL + tmdbData.poster_path,
-      backdropPath: tmdbData.backdrop_path && tmdbService.IMAGE_BASE_URL + tmdbData.backdrop_path,
-      status: 'ENDED',
-      type: 'MOVIE',
-      trailerUrl,
-      logoPath,
-      category,
-      tmdbId,
-    } satisfies Prisma.MediaCreateInput
+        watchProviders: {
+          connectOrCreate: flatrate.map((item) => ({
+            where: { slug: _.kebabCase(item.provider_name) },
+            create: {
+              name: item.provider_name,
+              slug: _.kebabCase(item.provider_name),
+              tmdbId: item.provider_id,
+              priority: item.display_priority,
+              logoPath: tmdbService.IMAGE_BASE_URL + item.logo_path,
+            },
+          })),
+        },
+        alternativeTitles,
+        posterPath: tmdbData.poster_path && tmdbService.IMAGE_BASE_URL + tmdbData.poster_path,
+        backdropPath: tmdbData.backdrop_path && tmdbService.IMAGE_BASE_URL + tmdbData.backdrop_path,
+        status: 'ENDED',
+        type: 'MOVIE',
+        trailerUrl,
+        logoPath,
+        category,
+        tmdbId,
+      } satisfies Prisma.MediaCreateInput
 
-    const newMovie = await mediaService.upsert(mediaData)
-    if (!newMovie) throw new Error(`Media not upserted ${mediaData}`)
+      const newMovie = await mediaService.upsert(mediaData)
+      if (!newMovie) throw new Error(`Media not upserted ${mediaData}`)
 
-    return { newMovie }
+      return { newMovie }
+    } catch (error) {
+      console.error(error)
+      return null
+    }
   }
 
   scrapePopularMovies = async () => {
