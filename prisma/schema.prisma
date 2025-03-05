@@ -1,6 +1,6 @@
-// Database configuration
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["nativeDistinct", "postgresqlExtensions", "driverAdapters"]
 }
 
 datasource db {
@@ -220,5 +220,5 @@ model Collection {
   posterPath   String
   backdropPath String
 
-  parts Media[]
+  media Media[]
 }

@@ -64,3 +64,8 @@ type ExtractedLink = {
   host: string
   referer?: string
 }
+
+interface EmbedLink {
+  url: string
+  language: 'VO' | 'VF'
+}
